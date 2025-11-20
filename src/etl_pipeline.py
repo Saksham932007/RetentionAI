@@ -12,11 +12,18 @@ from typing import Optional, Dict, Any, List, Tuple
 from pathlib import Path
 import numpy as np
 
-from .config import (
-    RAW_DATA_DIR, INTERIM_DATA_DIR, PROCESSED_DATA_DIR,
-    DATA_CONFIG, RANDOM_SEED
-)
-from .database import DatabaseManager, get_database_manager
+try:
+    from .config import (
+        RAW_DATA_DIR, INTERIM_DATA_DIR, PROCESSED_DATA_DIR,
+        DATA_CONFIG, RANDOM_SEED
+    )
+    from .database import DatabaseManager, get_database_manager
+except ImportError:
+    from config import (
+        RAW_DATA_DIR, INTERIM_DATA_DIR, PROCESSED_DATA_DIR,
+        DATA_CONFIG, RANDOM_SEED
+    )
+    from database import DatabaseManager, get_database_manager
 
 # Configure logging
 logger = logging.getLogger(__name__)

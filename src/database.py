@@ -18,7 +18,10 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker, Session
 
-from .config import DATABASE_URL, RANDOM_SEED
+try:
+    from .config import DATABASE_URL, RANDOM_SEED
+except ImportError:
+    from config import DATABASE_URL, RANDOM_SEED
 
 # Configure logging
 logger = logging.getLogger(__name__)

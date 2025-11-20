@@ -12,7 +12,10 @@ import numpy as np
 from typing import Dict, Any, Optional
 from pathlib import Path
 
-from .config import RAW_DATA_DIR, RANDOM_SEED
+try:
+    from .config import RAW_DATA_DIR, RANDOM_SEED
+except ImportError:
+    from config import RAW_DATA_DIR, RANDOM_SEED
 
 # Configure logging
 logger = logging.getLogger(__name__)
