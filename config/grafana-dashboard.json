@@ -1,0 +1,230 @@
+# Grafana Dashboard Configuration for RetentionAI
+# This file contains JSON configuration for Grafana dashboards
+
+{
+  "dashboard": {
+    "id": null,
+    "title": "RetentionAI - Production Monitoring",
+    "tags": ["retentionai", "ml", "monitoring", "churn-prediction"],
+    "style": "dark",
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Application Overview",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "retentionai_requests_total",
+            "legendFormat": "Total Requests"
+          },
+          {
+            "expr": "rate(retentionai_requests_total[5m])",
+            "legendFormat": "Request Rate (5m)"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 100},
+                {"color": "red", "value": 500}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Request Rate",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(retentionai_requests_total[5m])",
+            "legendFormat": "Request Rate"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "fillOpacity": 10
+            }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Response Times",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(retentionai_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "95th percentile"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(retentionai_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "50th percentile"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "ML Model Performance",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "retentionai_model_accuracy",
+            "legendFormat": "Accuracy"
+          },
+          {
+            "expr": "retentionai_model_auc",
+            "legendFormat": "AUC Score"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 0.7},
+                {"color": "green", "value": 0.8}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Prediction Metrics",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(retentionai_predictions_total[5m])",
+            "legendFormat": "Predictions/sec"
+          },
+          {
+            "expr": "retentionai_churn_prediction_rate",
+            "legendFormat": "Churn Rate"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "System Resources",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "retentionai_memory_usage_bytes / 1024 / 1024",
+            "legendFormat": "Memory (MB)"
+          },
+          {
+            "expr": "retentionai_cpu_usage_percent",
+            "legendFormat": "CPU %"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Database Performance",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "retentionai_database_connections",
+            "legendFormat": "Active Connections"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(retentionai_database_query_duration_seconds_bucket[5m]))",
+            "legendFormat": "Query Time (95th)"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Error Rates",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(retentionai_requests_total{status=~\"4..|5..\"}[5m])",
+            "legendFormat": "4xx/5xx Errors"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "red"
+            }
+          }
+        }
+      },
+      {
+        "id": 9,
+        "title": "Data Quality",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "retentionai_data_quality_score",
+            "legendFormat": "Quality Score"
+          },
+          {
+            "expr": "retentionai_data_drift_score",
+            "legendFormat": "Drift Score"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 0.6},
+                {"color": "green", "value": 0.8}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "Business Impact",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "retentionai_customers_processed_total",
+            "legendFormat": "Customers Processed"
+          },
+          {
+            "expr": "retentionai_revenue_impact",
+            "legendFormat": "Revenue Impact"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "color": {
+              "mode": "continuous-GrYlRd"
+            }
+          }
+        }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "10s",
+    "schemaVersion": 27,
+    "version": 1
+  }
+}

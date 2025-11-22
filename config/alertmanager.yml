@@ -1,0 +1,158 @@
+# Alertmanager Configuration for RetentionAI
+# This configuration defines how alerts are routed and sent
+
+global:
+  smtp_smarthost: 'localhost:587'
+  smtp_from: 'retentionai-alerts@yourcompany.com'
+
+# Templates for alert notifications
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# The root route on which each incoming alert enters.
+route:
+  # The labels by which incoming alerts are grouped together.
+  group_by: ['alertname', 'cluster', 'service']
+
+  # When a new group of alerts is created by an incoming alert, wait at
+  # least 'group_wait' to send the initial notification.
+  group_wait: 10s
+
+  # When the first notification was sent, wait 'group_interval' to send a batch
+  # of new alerts that started firing for that group.
+  group_interval: 10s
+
+  # If an alert has successfully been sent, wait 'repeat_interval' to
+  # resend them.
+  repeat_interval: 1h
+
+  # Default receiver
+  receiver: 'default'
+
+  # All the above attributes are inherited by all child routes and can
+  # be overwritten on each.
+  routes:
+    # Critical alerts route
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 1m
+      repeat_interval: 30m
+
+    # ML model alerts
+    - match_re:
+        alertname: '(ModelAccuracyLow|HighChurnRate|LowDataQuality)'
+      receiver: 'ml-team'
+      group_wait: 2m
+      repeat_interval: 2h
+
+    # Infrastructure alerts
+    - match_re:
+        alertname: '(HighMemoryUsage|HighCPUUsage|SlowDatabaseQueries)'
+      receiver: 'infrastructure-team'
+      group_wait: 5m
+      repeat_interval: 4h
+
+    # Business alerts
+    - match_re:
+        alertname: '(LowCustomerProcessingRate|NegativeRevenueImpact)'
+      receiver: 'business-team'
+      group_wait: 10m
+      repeat_interval: 6h
+
+# Notification receivers
+receivers:
+  - name: 'default'
+    slack_configs:
+      - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+        channel: '#retentionai-alerts'
+        title: 'RetentionAI Alert'
+        text: |
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Severity: {{ .Labels.severity }}
+          {{ end }}
+
+  - name: 'critical-alerts'
+    email_configs:
+      - to: 'critical-alerts@yourcompany.com'
+        subject: 'CRITICAL: RetentionAI Alert'
+        body: |
+          {{ range .Alerts }}
+          CRITICAL ALERT: {{ .Annotations.summary }}
+          
+          Description: {{ .Annotations.description }}
+          Severity: {{ .Labels.severity }}
+          Time: {{ .StartsAt }}
+          
+          Please investigate immediately.
+          {{ end }}
+    
+    slack_configs:
+      - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+        channel: '#critical-alerts'
+        title: '🚨 CRITICAL: RetentionAI Alert'
+        text: |
+          {{ range .Alerts }}
+          🚨 **CRITICAL ALERT**: {{ .Annotations.summary }}
+          
+          **Description**: {{ .Annotations.description }}
+          **Severity**: {{ .Labels.severity }}
+          **Time**: {{ .StartsAt }}
+          {{ end }}
+
+  - name: 'ml-team'
+    email_configs:
+      - to: 'ml-team@yourcompany.com'
+        subject: 'ML Alert: RetentionAI'
+        body: |
+          {{ range .Alerts }}
+          ML Alert: {{ .Annotations.summary }}
+          
+          Description: {{ .Annotations.description }}
+          Alert: {{ .Labels.alertname }}
+          Time: {{ .StartsAt }}
+          {{ end }}
+
+  - name: 'infrastructure-team'
+    email_configs:
+      - to: 'infrastructure@yourcompany.com'
+        subject: 'Infrastructure Alert: RetentionAI'
+        body: |
+          {{ range .Alerts }}
+          Infrastructure Alert: {{ .Annotations.summary }}
+          
+          Description: {{ .Annotations.description }}
+          Alert: {{ .Labels.alertname }}
+          Time: {{ .StartsAt }}
+          {{ end }}
+
+  - name: 'business-team'
+    email_configs:
+      - to: 'business-team@yourcompany.com'
+        subject: 'Business Metrics Alert: RetentionAI'
+        body: |
+          {{ range .Alerts }}
+          Business Alert: {{ .Annotations.summary }}
+          
+          Description: {{ .Annotations.description }}
+          Alert: {{ .Labels.alertname }}
+          Time: {{ .StartsAt }}
+          {{ end }}
+
+# Inhibition rules allow to mute a set of alerts given that another alert is firing.
+inhibit_rules:
+  # Inhibit any warning-level alert if the same alert is already firing at critical level
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']
+
+  # If application is down, don't alert on other application metrics
+  - source_match:
+      alertname: 'ApplicationDown'
+    target_match_re:
+      alertname: '(HighRequestRate|SlowResponseTime|HighErrorRate)'
+    equal: ['instance']

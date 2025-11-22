@@ -1,0 +1,192 @@
+# Prometheus Alerting Rules for RetentionAI
+# This file defines alerting rules for monitoring the RetentionAI application
+
+groups:
+  - name: retentionai.application
+    rules:
+      # Application Health Alerts
+      - alert: HighRequestRate
+        expr: rate(retentionai_requests_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High request rate detected"
+          description: "Request rate is {{ $value }} requests/second, which is above the threshold of 100."
+
+      - alert: HighErrorRate
+        expr: rate(retentionai_requests_total{status=~"4..|5.."}[5m]) / rate(retentionai_requests_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }}, which is above the 5% threshold."
+
+      - alert: SlowResponseTime
+        expr: histogram_quantile(0.95, rate(retentionai_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow response times detected"
+          description: "95th percentile response time is {{ $value }}s, which is above the 2s threshold."
+
+      # ML Model Performance Alerts
+      - alert: ModelAccuracyLow
+        expr: retentionai_model_accuracy < 0.8
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Model accuracy below threshold"
+          description: "Model accuracy is {{ $value | humanizePercentage }}, which is below the 80% threshold."
+
+      - alert: ModelAUCLow
+        expr: retentionai_model_auc < 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Model AUC score below threshold"
+          description: "Model AUC score is {{ $value }}, which is below the 0.85 threshold."
+
+      - alert: HighChurnRate
+        expr: retentionai_churn_prediction_rate > 0.5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High churn prediction rate"
+          description: "Churn prediction rate is {{ $value | humanizePercentage }}, indicating potential customer retention issues."
+
+      - alert: SlowPredictions
+        expr: histogram_quantile(0.95, rate(retentionai_prediction_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow ML predictions"
+          description: "95th percentile prediction time is {{ $value }}s, which may impact user experience."
+
+  - name: retentionai.infrastructure
+    rules:
+      # System Resource Alerts
+      - alert: HighMemoryUsage
+        expr: retentionai_memory_usage_bytes / (1024 * 1024 * 1024) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value | humanizeBytes }}, which may indicate a memory leak."
+
+      - alert: HighCPUUsage
+        expr: retentionai_cpu_usage_percent > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}%, which may impact application performance."
+
+      # Database Alerts
+      - alert: SlowDatabaseQueries
+        expr: histogram_quantile(0.95, rate(retentionai_database_query_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow database queries detected"
+          description: "95th percentile database query time is {{ $value }}s."
+
+      - alert: HighDatabaseConnections
+        expr: retentionai_database_connections > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High number of database connections"
+          description: "Database connections count is {{ $value }}, which may indicate connection leaks."
+
+      # Data Quality Alerts
+      - alert: LowDataQuality
+        expr: retentionai_data_quality_score < 0.7
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Low data quality detected"
+          description: "Data quality score is {{ $value | humanizePercentage }}, which may affect model performance."
+
+      - alert: HighDataDrift
+        expr: retentionai_data_drift_score > 0.3
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High data drift detected"
+          description: "Data drift score is {{ $value | humanizePercentage }}, indicating potential model degradation."
+
+  - name: retentionai.business
+    rules:
+      # Business Metrics Alerts
+      - alert: LowCustomerProcessingRate
+        expr: rate(retentionai_customers_processed_total[1h]) < 100
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low customer processing rate"
+          description: "Customer processing rate is {{ $value }} customers/hour, which is below expected levels."
+
+      - alert: NegativeRevenueImpact
+        expr: retentionai_revenue_impact < 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Negative revenue impact detected"
+          description: "Revenue impact is ${{ $value }}, indicating potential issues with prediction quality."
+
+  - name: retentionai.training
+    rules:
+      # Training Job Alerts
+      - alert: HighTrainingJobFailureRate
+        expr: rate(retentionai_training_jobs_total{status="failed"}[1h]) / rate(retentionai_training_jobs_total[1h]) > 0.2
+        for: 30m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High training job failure rate"
+          description: "Training job failure rate is {{ $value | humanizePercentage }}, which may indicate infrastructure issues."
+
+      - alert: NoRecentTrainingJobs
+        expr: increase(retentionai_training_jobs_total[24h]) == 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No training jobs in last 24 hours"
+          description: "No training jobs have been executed in the last 24 hours, model may be getting stale."
+
+  - name: retentionai.connectivity
+    rules:
+      # Connectivity and Availability Alerts
+      - alert: ApplicationDown
+        expr: up{job="retentionai-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "RetentionAI application is down"
+          description: "The RetentionAI application has been down for more than 1 minute."
+
+      - alert: LowActiveConnections
+        expr: retentionai_active_connections < 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low number of active connections"
+          description: "Active connections count is {{ $value }}, which may indicate connectivity issues."
