@@ -162,12 +162,7 @@ class DataPreprocessor:
         
         # Tenure cohorts (grouping by years)
         if 'tenure' in df_engineered.columns and self.config.get('create_tenure_cohorts', True):
-            df_engineered['tenure_cohort'] = pd.cut(
-                df_engineered['tenure'], 
-                bins=[-1, 12, 24, 48, 72, float('inf')], 
-                labels=['0-1 year', '1-2 years', '2-4 years', '4-6 years', '6+ years']
-            ).astype(str)
-            logger.info("Created tenure cohort feature")
+            df_engineered = self.create_tenure_cohorts(df_engineered)
         
         # Monthly charges per service ratio
         if all(col in df_engineered.columns for col in ['monthlycharges', 'totalcharges', 'tenure']):
@@ -211,6 +206,27 @@ class DataPreprocessor:
         
         logger.info(f"Feature engineering completed: {df_engineered.shape[1]} total features")
         return df_engineered
+
+    def create_tenure_cohorts(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Create tenure cohort buckets from the `tenure` column.
+
+        Args:
+            df: Input DataFrame containing a `tenure` column (in months)
+
+        Returns:
+            pd.DataFrame: DataFrame with a new `tenure_cohort` column
+        """
+        df_out = df.copy()
+
+        df_out['tenure_cohort'] = pd.cut(
+            df_out['tenure'],
+            bins=[-1, 12, 24, 48, 72, float('inf')],
+            labels=['0-1 year', '1-2 years', '2-4 years', '4-6 years', '6+ years']
+        ).astype(str)
+
+        logger.info("Created tenure cohort feature via create_tenure_cohorts()")
+        return df_out
     
     def get_feature_types(self, df: pd.DataFrame) -> Dict[str, List[str]]:
         """
