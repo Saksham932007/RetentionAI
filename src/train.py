@@ -29,6 +29,8 @@ from sklearn.metrics import (
 from sklearn.model_selection import cross_val_score, StratifiedKFold
 from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline as ImbPipeline
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 try:
     from .config import (
@@ -220,6 +222,11 @@ class ModelTrainer:
                 registered_model_name="churn_prediction_model"
             )
             
+            # Log artifacts (plots, feature importance, etc.)
+            self._log_artifacts_to_mlflow(
+                feature_importance, X_train, y_train, y_train_pred, y_train_proba
+            )
+            
             self.is_fitted = True
             logger.info(f"Model training completed in {training_time:.2f} seconds")
             
@@ -331,6 +338,165 @@ class ModelTrainer:
         
         logger.info(f"Extracted feature importance for {len(feature_importance)} features")
         return feature_importance
+    
+    def _log_artifacts_to_mlflow(
+        self,
+        feature_importance: Dict[str, float],
+        X_train: pd.DataFrame,
+        y_train: pd.Series,
+        y_train_pred: np.ndarray,
+        y_train_proba: np.ndarray
+    ) -> None:
+        """
+        Log model artifacts to MLflow including plots and data.
+        
+        Args:
+            feature_importance: Feature importance dictionary
+            X_train: Training features
+            y_train: Training target
+            y_train_pred: Training predictions
+            y_train_proba: Training prediction probabilities
+        """
+        try:
+            # Create temporary directory for plots
+            import tempfile
+            temp_dir = Path(tempfile.mkdtemp())
+            
+            # 1. Feature Importance Plot
+            if feature_importance:
+                self._create_feature_importance_plot(feature_importance, temp_dir)
+            
+            # 2. Confusion Matrix Plot
+            self._create_confusion_matrix_plot(y_train, y_train_pred, temp_dir)
+            
+            # 3. ROC Curve Plot
+            self._create_roc_curve_plot(y_train, y_train_proba, temp_dir)
+            
+            # 4. Precision-Recall Curve Plot
+            self._create_pr_curve_plot(y_train, y_train_proba, temp_dir)
+            
+            # 5. Prediction Distribution Plot
+            self._create_prediction_distribution_plot(y_train_proba, temp_dir)
+            
+            # Log all plots
+            mlflow.log_artifacts(str(temp_dir), "plots")
+            
+            # 6. Log feature importance as JSON
+            importance_path = temp_dir / "feature_importance.json"
+            save_json(feature_importance, importance_path)
+            mlflow.log_artifact(str(importance_path), "data")
+            
+            # Clean up
+            import shutil
+            shutil.rmtree(temp_dir)
+            
+            logger.info("Model artifacts logged to MLflow")
+            
+        except Exception as e:
+            logger.warning(f"Failed to log artifacts to MLflow: {e}")
+    
+    def _create_feature_importance_plot(self, feature_importance: Dict[str, float], output_dir: Path) -> None:
+        """Create feature importance bar plot."""
+        # Get top 20 features
+        top_features = dict(list(feature_importance.items())[:20])
+        
+        plt.figure(figsize=(10, 8))
+        features = list(top_features.keys())
+        importances = list(top_features.values())
+        
+        plt.barh(range(len(features)), importances)
+        plt.yticks(range(len(features)), features)
+        plt.xlabel('Feature Importance')
+        plt.title('Top 20 Feature Importances')
+        plt.gca().invert_yaxis()
+        plt.tight_layout()
+        
+        plt.savefig(output_dir / "feature_importance.png", dpi=150, bbox_inches='tight')
+        plt.close()
+    
+    def _create_confusion_matrix_plot(self, y_true: pd.Series, y_pred: np.ndarray, output_dir: Path) -> None:
+        """Create confusion matrix heatmap."""
+        from sklearn.metrics import confusion_matrix
+        
+        cm = confusion_matrix(y_true, y_pred)
+        
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                   xticklabels=['Not Churn', 'Churn'], 
+                   yticklabels=['Not Churn', 'Churn'])
+        plt.title('Confusion Matrix')
+        plt.xlabel('Predicted')
+        plt.ylabel('Actual')
+        plt.tight_layout()
+        
+        plt.savefig(output_dir / "confusion_matrix.png", dpi=150, bbox_inches='tight')
+        plt.close()
+    
+    def _create_roc_curve_plot(self, y_true: pd.Series, y_proba: np.ndarray, output_dir: Path) -> None:
+        """Create ROC curve plot."""
+        from sklearn.metrics import roc_curve, auc
+        
+        fpr, tpr, _ = roc_curve(y_true, y_proba)
+        roc_auc = auc(fpr, tpr)
+        
+        plt.figure(figsize=(8, 6))
+        plt.plot(fpr, tpr, color='darkorange', lw=2, 
+                label=f'ROC curve (AUC = {roc_auc:.3f})')
+        plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--', alpha=0.5)
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('ROC Curve')
+        plt.legend(loc="lower right")
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        
+        plt.savefig(output_dir / "roc_curve.png", dpi=150, bbox_inches='tight')
+        plt.close()
+    
+    def _create_pr_curve_plot(self, y_true: pd.Series, y_proba: np.ndarray, output_dir: Path) -> None:
+        """Create Precision-Recall curve plot."""
+        from sklearn.metrics import precision_recall_curve, average_precision_score
+        
+        precision, recall, _ = precision_recall_curve(y_true, y_proba)
+        ap_score = average_precision_score(y_true, y_proba)
+        
+        plt.figure(figsize=(8, 6))
+        plt.plot(recall, precision, color='blue', lw=2,
+                label=f'PR curve (AP = {ap_score:.3f})')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('Recall')
+        plt.ylabel('Precision')
+        plt.title('Precision-Recall Curve')
+        plt.legend(loc="lower left")
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        
+        plt.savefig(output_dir / "precision_recall_curve.png", dpi=150, bbox_inches='tight')
+        plt.close()
+    
+    def _create_prediction_distribution_plot(self, y_proba: np.ndarray, output_dir: Path) -> None:
+        """Create prediction probability distribution plot."""
+        plt.figure(figsize=(10, 6))
+        
+        plt.subplot(1, 2, 1)
+        plt.hist(y_proba, bins=50, alpha=0.7, color='skyblue', edgecolor='black')
+        plt.xlabel('Prediction Probability')
+        plt.ylabel('Frequency')
+        plt.title('Distribution of Prediction Probabilities')
+        plt.grid(True, alpha=0.3)
+        
+        plt.subplot(1, 2, 2)
+        plt.boxplot(y_proba)
+        plt.ylabel('Prediction Probability')
+        plt.title('Probability Distribution Box Plot')
+        plt.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig(output_dir / "prediction_distribution.png", dpi=150, bbox_inches='tight')
+        plt.close()
     
     def evaluate_model(
         self, 
