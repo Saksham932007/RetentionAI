@@ -20,6 +20,8 @@ from datetime import datetime
 
 # ML Libraries
 import xgboost as xgb
+import optuna
+from optuna.integration import XGBoostPruningCallback
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
     roc_auc_score, confusion_matrix, classification_report
@@ -435,6 +437,128 @@ class ModelTrainer:
         
         self.is_fitted = True
         logger.info(f"Model loaded from: {filepath}")
+    
+    def optimize_hyperparameters(
+        self,
+        X_train: pd.DataFrame,
+        y_train: pd.Series,
+        X_val: pd.DataFrame, 
+        y_val: pd.Series,
+        n_trials: int = None,
+        timeout: Optional[int] = None,
+        direction: str = 'maximize',
+        metric: str = 'roc_auc'
+    ) -> Dict[str, Any]:
+        """
+        Optimize hyperparameters using Optuna.
+        
+        Args:
+            X_train: Training features
+            y_train: Training target
+            X_val: Validation features
+            y_val: Validation target
+            n_trials: Number of optimization trials
+            timeout: Timeout in seconds
+            direction: Optimization direction ('maximize' or 'minimize')
+            metric: Metric to optimize
+            
+        Returns:
+            dict: Optimization results with best parameters
+        """
+        if n_trials is None:
+            n_trials = self.config.get('n_trials', 100)
+        
+        if timeout is None:
+            timeout = self.config.get('optuna_timeout', 3600)
+        
+        logger.info(f"Starting hyperparameter optimization: {n_trials} trials, {timeout}s timeout")
+        
+        def objective(trial):
+            # Define search space
+            params = {
+                'objective': 'binary:logistic',
+                'eval_metric': 'auc',
+                'random_state': RANDOM_SEED,
+                'n_jobs': -1,
+                
+                # Hyperparameters to optimize
+                'max_depth': trial.suggest_int('max_depth', 3, 10),
+                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
+                'n_estimators': trial.suggest_int('n_estimators', 100, 1000),
+                'subsample': trial.suggest_float('subsample', 0.6, 1.0),
+                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
+                'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
+                'reg_alpha': trial.suggest_float('reg_alpha', 0.0, 1.0),
+                'reg_lambda': trial.suggest_float('reg_lambda', 1.0, 4.0),
+            }
+            
+            # Create and train model
+            model = xgb.XGBClassifier(**params)
+            
+            # Add pruning callback
+            pruning_callback = XGBoostPruningCallback(trial, f'validation_1-{params["eval_metric"]}')
+            
+            model.fit(
+                X_train, y_train,
+                eval_set=[(X_train, y_train), (X_val, y_val)],
+                callbacks=[pruning_callback],
+                verbose=False
+            )
+            
+            # Calculate validation metric
+            y_val_pred = model.predict(X_val)
+            y_val_proba = model.predict_proba(X_val)[:, 1]
+            
+            if metric == 'roc_auc':
+                score = roc_auc_score(y_val, y_val_proba)
+            elif metric == 'f1':
+                score = f1_score(y_val, y_val_pred)
+            elif metric == 'accuracy':
+                score = accuracy_score(y_val, y_val_pred)
+            else:
+                raise ValueError(f"Unsupported metric: {metric}")
+            
+            return score
+        
+        # Create study
+        study = optuna.create_study(
+            direction=direction,
+            pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=10)
+        )
+        
+        # Start MLflow run for optimization
+        with mlflow.start_run(run_name=f"optuna_optimization_{datetime.now().strftime('%Y%m%d_%H%M%S')}"):
+            
+            # Optimize
+            study.optimize(objective, n_trials=n_trials, timeout=timeout)
+            
+            # Log optimization results
+            best_params = study.best_params
+            best_value = study.best_value
+            
+            mlflow.log_params(best_params)
+            mlflow.log_metric(f"best_{metric}", best_value)
+            mlflow.log_metric("n_trials_completed", len(study.trials))
+            
+            # Train final model with best parameters
+            final_params = self.config.get('xgboost_params', {}).copy()
+            final_params.update(best_params)
+            
+            self.model = xgb.XGBClassifier(**final_params)
+            self.training_artifacts['training_params'] = final_params
+            
+            optimization_results = {
+                'best_params': best_params,
+                'best_value': best_value,
+                'n_trials': len(study.trials),
+                'study': study,
+                'optimization_metric': metric
+            }
+            
+            logger.info(f"Optimization completed: best {metric} = {best_value:.4f}")
+            logger.info(f"Best parameters: {best_params}")
+            
+            return optimization_results
 
 
 if __name__ == "__main__":
