@@ -244,6 +244,7 @@ class ModelTrainer:
         Returns:
             dict: Dictionary of metrics
         """
+        # Basic classification metrics
         metrics = {
             f'{prefix}_accuracy': accuracy_score(y_true, y_pred),
             f'{prefix}_precision': precision_score(y_true, y_pred, zero_division=0),
@@ -252,11 +253,56 @@ class ModelTrainer:
             f'{prefix}_auc': roc_auc_score(y_true, y_proba),
         }
         
+        # Additional metrics for imbalanced datasets
+        from sklearn.metrics import precision_recall_curve, average_precision_score
+        
+        # Precision-Recall AUC (better for imbalanced datasets)
+        metrics[f'{prefix}_pr_auc'] = average_precision_score(y_true, y_proba)
+        
+        # Confusion matrix components
+        cm = confusion_matrix(y_true, y_pred)
+        if cm.shape == (2, 2):  # Binary classification
+            tn, fp, fn, tp = cm.ravel()
+            
+            # Specificity (True Negative Rate)
+            metrics[f'{prefix}_specificity'] = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+            
+            # False Positive Rate
+            metrics[f'{prefix}_fpr'] = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+            
+            # False Negative Rate
+            metrics[f'{prefix}_fnr'] = fn / (fn + tp) if (fn + tp) > 0 else 0.0
+            
+            # Balanced Accuracy
+            sensitivity = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+            metrics[f'{prefix}_balanced_accuracy'] = (sensitivity + specificity) / 2
+            
+            # Matthews Correlation Coefficient
+            from sklearn.metrics import matthews_corrcoef
+            metrics[f'{prefix}_mcc'] = matthews_corrcoef(y_true, y_pred)
+            
+            # Log Loss
+            from sklearn.metrics import log_loss
+            metrics[f'{prefix}_log_loss'] = log_loss(y_true, y_proba)
+        
         # Class distribution
         unique, counts = np.unique(y_true, return_counts=True)
         for class_val, count in zip(unique, counts):
             metrics[f'{prefix}_class_{class_val}_count'] = count
             metrics[f'{prefix}_class_{class_val}_proportion'] = count / len(y_true)
+        
+        # Prediction distribution
+        pred_unique, pred_counts = np.unique(y_pred, return_counts=True)
+        for class_val, count in zip(pred_unique, pred_counts):
+            metrics[f'{prefix}_pred_class_{class_val}_count'] = count
+            metrics[f'{prefix}_pred_class_{class_val}_proportion'] = count / len(y_pred)
+        
+        # Probability statistics
+        metrics[f'{prefix}_prob_mean'] = np.mean(y_proba)
+        metrics[f'{prefix}_prob_std'] = np.std(y_proba)
+        metrics[f'{prefix}_prob_min'] = np.min(y_proba)
+        metrics[f'{prefix}_prob_max'] = np.max(y_proba)
         
         return metrics
     
