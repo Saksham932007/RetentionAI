@@ -33,6 +33,57 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+class TargetEncoder(BaseEstimator, TransformerMixin):
+    """
+    Simple target encoder for high-cardinality categorical features.
+
+    This estimator computes the mean target value per category during fit
+    and replaces categories with the corresponding mean during transform.
+    Unseen categories are replaced with the global mean.
+    """
+
+    def __init__(self, columns: Optional[List[str]] = None, target_column: str = 'churn'):
+        self.columns = columns
+        self.target_column = target_column
+        self._mappings: Dict[str, Dict[Any, float]] = {}
+        self._global_mean: float = 0.0
+
+    def fit(self, X: Union[pd.DataFrame, np.ndarray], y: Optional[pd.Series] = None):
+        if isinstance(X, np.ndarray):
+            raise ValueError('TargetEncoder requires a pandas DataFrame as input')
+
+        df = X.copy()
+        if y is None:
+            if self.target_column in df.columns:
+                y = df[self.target_column]
+            else:
+                raise ValueError('Target series must be provided if target column not in X')
+
+        self._global_mean = float(y.mean())
+
+        cols = self.columns or [c for c in df.columns if df[c].dtype == 'object']
+        for col in cols:
+            mapping = df.groupby(col)[self.target_column].mean().to_dict() if self.target_column in df.columns else df.groupby(col)[y.name].mean().to_dict()
+            # Ensure numeric floats
+            self._mappings[col] = {k: float(v) for k, v in mapping.items()}
+
+        return self
+
+    def transform(self, X: Union[pd.DataFrame, np.ndarray]) -> pd.DataFrame:
+        if isinstance(X, np.ndarray):
+            raise ValueError('TargetEncoder requires a pandas DataFrame as input')
+
+        df = X.copy()
+        for col, mapping in self._mappings.items():
+            if col in df.columns:
+                df[col] = df[col].map(mapping).fillna(self._global_mean).astype(float)
+
+        return df
+
+    def fit_transform(self, X: Union[pd.DataFrame, np.ndarray], y: Optional[pd.Series] = None) -> pd.DataFrame:
+        return self.fit(X, y).transform(X)
+
+
 class DataPreprocessor:
     """
     Base data preprocessor for customer churn prediction.
