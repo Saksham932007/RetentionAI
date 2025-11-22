@@ -364,6 +364,47 @@ class DataPreprocessor:
         df_out[cols] = scaler.transform(df_out[cols].astype(float))
         logger.info(f"Applied StandardScaler to {len(cols)} numerical columns")
         return df_out
+
+    def build_preprocessing_pipeline(
+        self,
+        numerical_columns: Optional[List[str]] = None,
+        target_encode_columns: Optional[List[str]] = None,
+        passthrough: str = 'passthrough'
+    ) -> Pipeline:
+        """
+        Build a sklearn Pipeline that applies target encoding (supervised)
+        followed by column transformations (scaling for numerical features).
+
+        Args:
+            numerical_columns: List of numerical columns to scale. If None,
+                they will be inferred from the data during fit.
+            target_encode_columns: List of categorical columns to target-encode.
+            passthrough: How to treat remaining columns in ColumnTransformer.
+
+        Returns:
+            sklearn.pipeline.Pipeline: Composed preprocessing pipeline
+        """
+        # Initialize target encoder (it will be fitted within pipeline.fit)
+        target_encoder = TargetEncoder(columns=target_encode_columns)
+
+        # ColumnTransformer will scale numerical columns and passthrough the rest
+        num_transformer = StandardScaler()
+
+        column_transformer = ColumnTransformer(
+            transformers=[
+                ('num', num_transformer, numerical_columns or []),
+            ],
+            remainder=passthrough,
+            sparse_threshold=0
+        )
+
+        pipeline = Pipeline(steps=[
+            ('target_encoder', target_encoder),
+            ('column_transformer', column_transformer)
+        ])
+
+        logger.info("Built preprocessing sklearn Pipeline")
+        return pipeline
     
     def prepare_target(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
         """
