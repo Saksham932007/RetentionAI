@@ -2,7 +2,7 @@
 # Multi-stage build for optimized production deployment
 
 # Stage 1: Base Python environment with dependencies
-FROM python:3.11-slim as base
+FROM python:3.14-slim as base
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
