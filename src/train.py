@@ -31,6 +31,10 @@ from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline as ImbPipeline
 import matplotlib.pyplot as plt
 import seaborn as sns
+try:
+    import shap
+except ImportError:
+    shap = None
 
 try:
     from .config import (
@@ -497,6 +501,167 @@ class ModelTrainer:
         plt.tight_layout()
         plt.savefig(output_dir / "prediction_distribution.png", dpi=150, bbox_inches='tight')
         plt.close()
+    
+    def extract_advanced_feature_importance(
+        self,
+        X: pd.DataFrame,
+        max_display: int = 20,
+        sample_size: int = 1000
+    ) -> Dict[str, Any]:
+        """
+        Extract advanced feature importance using SHAP values and statistical analysis.
+        
+        Args:
+            X: Features DataFrame for SHAP analysis
+            max_display: Maximum number of features to analyze
+            sample_size: Sample size for SHAP analysis (for performance)
+            
+        Returns:
+            dict: Advanced feature importance analysis
+        """
+        if not self.is_fitted or self.model is None:
+            raise ValueError("Model must be trained before extracting feature importance")
+        
+        importance_analysis = {
+            'basic_importance': self._extract_feature_importance(X.columns),
+            'shap_available': shap is not None
+        }
+        
+        # Basic feature importance statistics
+        if hasattr(self.model, 'feature_importances_'):
+            importances = self.model.feature_importances_
+            
+            importance_analysis['statistical_summary'] = {
+                'mean_importance': float(np.mean(importances)),
+                'std_importance': float(np.std(importances)),
+                'max_importance': float(np.max(importances)),
+                'min_importance': float(np.min(importances)),
+                'importance_concentration': float(np.sum(importances[:10]) / np.sum(importances)) if len(importances) >= 10 else 1.0
+            }
+            
+            # Feature importance categories
+            sorted_indices = np.argsort(importances)[::-1]
+            high_importance = sorted_indices[:5]
+            medium_importance = sorted_indices[5:15] if len(sorted_indices) > 5 else []
+            low_importance = sorted_indices[15:] if len(sorted_indices) > 15 else []
+            
+            importance_analysis['feature_categories'] = {
+                'high_importance': [X.columns[i] for i in high_importance],
+                'medium_importance': [X.columns[i] for i in medium_importance],
+                'low_importance': [X.columns[i] for i in low_importance]
+            }
+        
+        # SHAP analysis if available
+        if shap is not None:
+            try:
+                logger.info("Computing SHAP values for advanced feature importance")
+                
+                # Sample data for performance if needed
+                X_sample = X.sample(n=min(sample_size, len(X)), random_state=RANDOM_SEED)
+                
+                # Create SHAP explainer
+                if hasattr(self.model, 'predict_proba'):
+                    explainer = shap.TreeExplainer(self.model)
+                    shap_values = explainer.shap_values(X_sample)
+                    
+                    # For binary classification, take positive class SHAP values
+                    if isinstance(shap_values, list) and len(shap_values) == 2:
+                        shap_values = shap_values[1]
+                    
+                    # Calculate SHAP-based importance
+                    shap_importance = np.abs(shap_values).mean(axis=0)
+                    shap_feature_importance = dict(zip(X.columns, shap_importance))
+                    shap_feature_importance = dict(sorted(
+                        shap_feature_importance.items(), 
+                        key=lambda x: x[1], 
+                        reverse=True
+                    ))
+                    
+                    importance_analysis['shap_importance'] = shap_feature_importance
+                    importance_analysis['shap_summary'] = {
+                        'mean_abs_shap': float(np.mean(np.abs(shap_values))),
+                        'std_abs_shap': float(np.std(np.abs(shap_values))),
+                        'sample_size': len(X_sample)
+                    }
+                    
+                    # Compare SHAP vs built-in importance
+                    if 'basic_importance' in importance_analysis:
+                        basic_imp = importance_analysis['basic_importance']
+                        common_features = set(basic_imp.keys()) & set(shap_feature_importance.keys())
+                        
+                        if common_features:
+                            basic_rank = {feat: i for i, feat in enumerate(basic_imp.keys())}
+                            shap_rank = {feat: i for i, feat in enumerate(shap_feature_importance.keys())}
+                            
+                            rank_correlation = np.corrcoef(
+                                [basic_rank[f] for f in common_features],
+                                [shap_rank[f] for f in common_features]
+                            )[0, 1] if len(common_features) > 1 else 1.0
+                            
+                            importance_analysis['importance_correlation'] = {
+                                'rank_correlation': float(rank_correlation),
+                                'common_features_count': len(common_features)
+                            }
+                    
+                    logger.info(f"SHAP analysis completed for {len(X_sample)} samples")
+                    
+            except Exception as e:
+                logger.warning(f"SHAP analysis failed: {e}")
+                importance_analysis['shap_error'] = str(e)
+        
+        return importance_analysis
+    
+    def create_shap_plots(
+        self,
+        X: pd.DataFrame,
+        output_dir: Path,
+        sample_size: int = 500
+    ) -> None:
+        """
+        Create SHAP visualization plots.
+        
+        Args:
+            X: Features DataFrame
+            output_dir: Directory to save plots
+            sample_size: Sample size for SHAP analysis
+        """
+        if shap is None:
+            logger.warning("SHAP not available, skipping SHAP plots")
+            return
+        
+        if not self.is_fitted or self.model is None:
+            raise ValueError("Model must be trained before creating SHAP plots")
+        
+        try:
+            # Sample data for performance
+            X_sample = X.sample(n=min(sample_size, len(X)), random_state=RANDOM_SEED)
+            
+            # Create explainer and compute SHAP values
+            explainer = shap.TreeExplainer(self.model)
+            shap_values = explainer.shap_values(X_sample)
+            
+            # For binary classification, take positive class
+            if isinstance(shap_values, list) and len(shap_values) == 2:
+                shap_values = shap_values[1]
+            
+            # Summary plot
+            plt.figure(figsize=(10, 8))
+            shap.summary_plot(shap_values, X_sample, show=False, max_display=20)
+            plt.tight_layout()
+            plt.savefig(output_dir / "shap_summary.png", dpi=150, bbox_inches='tight')
+            plt.close()
+            
+            # Feature importance plot
+            plt.figure(figsize=(10, 6))
+            shap.summary_plot(shap_values, X_sample, plot_type="bar", show=False, max_display=20)
+            plt.tight_layout()
+            plt.savefig(output_dir / "shap_importance.png", dpi=150, bbox_inches='tight')
+            plt.close()
+            
+            logger.info("SHAP plots created successfully")
+            
+        except Exception as e:
+            logger.warning(f"Failed to create SHAP plots: {e}")
     
     def evaluate_model(
         self, 
