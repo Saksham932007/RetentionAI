@@ -471,6 +471,51 @@ class DataPreprocessor:
         logger.info(f"  Test target distribution: {y_test.value_counts().to_dict()}")
         
         return X_train, X_test, y_train, y_test
+
+    def create_train_val_test_split(
+        self,
+        X: pd.DataFrame,
+        y: pd.Series,
+        train_size: float = 0.7,
+        val_size: float = 0.15,
+        test_size: float = 0.15,
+        random_state: int = RANDOM_SEED
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series]:
+        """
+        Split dataset into train/validation/test with stratification.
+
+        Args:
+            X: Features DataFrame
+            y: Target Series
+            train_size: Proportion for training set
+            val_size: Proportion for validation set
+            test_size: Proportion for test set
+            random_state: Random seed
+
+        Returns:
+            Tuple of (X_train, X_val, X_test, y_train, y_val, y_test)
+        """
+        if not np.isclose(train_size + val_size + test_size, 1.0):
+            raise ValueError('train_size + val_size + test_size must sum to 1.0')
+
+        # First split out test
+        X_temp, X_test, y_temp, y_test = train_test_split(
+            X, y, test_size=test_size, random_state=random_state, stratify=y
+        )
+
+        # Adjust validation proportion relative to remaining data
+        val_relative = val_size / (train_size + val_size)
+
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_temp, y_temp, test_size=val_relative, random_state=random_state, stratify=y_temp
+        )
+
+        logger.info(f"Train/Val/Test split created: {X_train.shape[0]} / {X_val.shape[0]} / {X_test.shape[0]} samples")
+        logger.info(f"Train distribution: {y_train.value_counts().to_dict()}")
+        logger.info(f"Val distribution: {y_val.value_counts().to_dict()}")
+        logger.info(f"Test distribution: {y_test.value_counts().to_dict()}")
+
+        return X_train, X_val, X_test, y_train, y_val, y_test
     
     def save_preprocessing_artifacts(self, filepath: Union[str, Path]) -> None:
         """
