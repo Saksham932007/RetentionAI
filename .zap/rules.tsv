@@ -1,0 +1,14 @@
+# ZAP Baseline Rules Configuration
+# Custom security testing rules for OWASP ZAP
+
+# Ignore false positives
+10021	IGNORE	(X-Content-Type-Options Header Missing)
+10020	IGNORE	(X-Frame-Options Header Not Set)
+
+# Custom rules for Streamlit applications
+90001	IGNORE	(Streamlit WebSocket connections)
+90002	IGNORE	(Streamlit static file serving)
+
+# ML API specific rules
+91001	IGNORE	(Model prediction endpoint rate limiting)
+91002	IGNORE	(Feature importance endpoint)
