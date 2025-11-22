@@ -321,6 +321,49 @@ class DataPreprocessor:
                    f"{len(numerical_features)} numerical, {len(binary_features)} binary")
         
         return feature_types
+
+    def fit_scaler(self, df: pd.DataFrame, columns: Optional[List[str]] = None) -> None:
+        """
+        Fit a StandardScaler on numerical columns and store the scaler artifact.
+
+        Args:
+            df: Input DataFrame
+            columns: List of numerical columns to scale. If None, detect automatically.
+        """
+        cols = columns or self.get_feature_types(df)['numerical']
+        if not cols:
+            logger.info("No numerical columns found to fit scaler")
+            return
+
+        scaler = StandardScaler()
+        scaler.fit(df[cols].astype(float))
+        self.preprocessing_artifacts['scalers']['numerical'] = {
+            'columns': cols,
+            'scaler': scaler
+        }
+        logger.info(f"Fitted StandardScaler on {len(cols)} numerical columns")
+
+    def transform_numerical(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Apply stored StandardScaler to numerical columns.
+
+        Args:
+            df: Input DataFrame
+
+        Returns:
+            pd.DataFrame: DataFrame with scaled numerical columns
+        """
+        df_out = df.copy()
+        scaler_info = self.preprocessing_artifacts.get('scalers', {}).get('numerical')
+        if not scaler_info:
+            logger.info("No fitted numerical scaler found; returning original DataFrame")
+            return df_out
+
+        cols = scaler_info['columns']
+        scaler: StandardScaler = scaler_info['scaler']
+        df_out[cols] = scaler.transform(df_out[cols].astype(float))
+        logger.info(f"Applied StandardScaler to {len(cols)} numerical columns")
+        return df_out
     
     def prepare_target(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
         """
