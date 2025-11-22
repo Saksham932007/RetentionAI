@@ -1,0 +1,144 @@
+# Prometheus Alert Rules for RetentionAI
+# Defines alerts for system health and performance
+
+groups:
+  - name: retentionai_system
+    rules:
+      # Service availability alerts
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "Service {{ $labels.job }} on instance {{ $labels.instance }} has been down for more than 1 minute."
+
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate for {{ $labels.job }}"
+          description: "Error rate for {{ $labels.job }} is {{ $value }} errors per second."
+
+  - name: retentionai_performance
+    rules:
+      # Performance alerts
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High response time for {{ $labels.job }}"
+          description: "95th percentile response time is {{ $value }}s for {{ $labels.job }}."
+
+      - alert: HighCPUUsage
+        expr: rate(container_cpu_usage_seconds_total[5m]) * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage for {{ $labels.name }}"
+          description: "CPU usage is {{ $value }}% for container {{ $labels.name }}."
+
+      - alert: HighMemoryUsage
+        expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage for {{ $labels.name }}"
+          description: "Memory usage is {{ $value }}% for container {{ $labels.name }}."
+
+  - name: retentionai_ml
+    rules:
+      # ML-specific alerts
+      - alert: ModelPredictionRateDropped
+        expr: rate(predictions_total[5m]) < 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Model prediction rate dropped"
+          description: "Prediction rate has dropped to {{ $value }} predictions per second."
+
+      - alert: ModelAccuracyDeclined
+        expr: model_accuracy < 0.8
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Model accuracy declined"
+          description: "Model accuracy has dropped to {{ $value }}, below the 80% threshold."
+
+      - alert: DataDriftDetected
+        expr: data_drift_score > 0.7
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Data drift detected"
+          description: "Data drift score is {{ $value }}, indicating significant distribution shift."
+
+  - name: retentionai_infrastructure
+    rules:
+      # Infrastructure alerts
+      - alert: DiskSpaceRunningOut
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100 < 10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk space running out"
+          description: "Only {{ $value }}% disk space remaining on {{ $labels.device }}."
+
+      - alert: DatabaseConnectionFailed
+        expr: database_connections_failed_total > 10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database connection failures"
+          description: "{{ $value }} database connection failures detected."
+
+      - alert: MLflowServerDown
+        expr: up{job="mlflow"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MLflow server is down"
+          description: "MLflow tracking server has been down for more than 2 minutes."
+
+  - name: retentionai_business
+    rules:
+      # Business logic alerts
+      - alert: HighChurnPredictionRate
+        expr: avg_over_time(churn_prediction_rate[1h]) > 0.5
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High churn prediction rate"
+          description: "Average churn prediction rate is {{ $value }} over the past hour."
+
+      - alert: NoRecentPredictions
+        expr: time() - max(last_prediction_timestamp) > 3600
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No recent predictions"
+          description: "No predictions have been made in the last hour."
+
+      - alert: ModelTrainingFailed
+        expr: increase(training_jobs_failed_total[24h]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Model training failed"
+          description: "{{ $value }} training jobs have failed in the last 24 hours."

@@ -1,0 +1,114 @@
+# Docker Ignore File for RetentionAI
+# Exclude unnecessary files from Docker build context
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+docs/
+README*
+
+# Test files
+tests/
+*_test.py
+test_*.py
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Jupyter Notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# MLflow
+mlruns/
+.mlruns/
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# Model artifacts (exclude training outputs)
+models/training_*/
+artifacts/
+
+# Development files
+.env.local
+.env.development
+docker-compose.override.yml
+docker-compose.dev.yml
+
+# Monitoring configs (will be mounted)
+monitoring/
+nginx.conf
+ssl/
+
+# Database files (will be mounted)
+*.db
+*.sqlite
+*.sqlite3
+
+# Large datasets (will be mounted)
+data/raw/*.csv
+data/processed/*.parquet
+
+# Build artifacts
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

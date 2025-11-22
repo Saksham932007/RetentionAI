@@ -1,0 +1,80 @@
+# Prometheus Configuration for RetentionAI Monitoring
+# Scrapes metrics from all application components
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'retentionai-monitor'
+    environment: '${ENVIRONMENT:-development}'
+
+# Rules for alerting
+rule_files:
+  - "alert_rules.yml"
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # Add Alertmanager when configured
+          # - alertmanager:9093
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 30s
+
+  # RetentionAI Streamlit Application
+  - job_name: 'retentionai-app'
+    static_configs:
+      - targets: ['retentionai-app:8501']
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+    scheme: 'http'
+    params:
+      format: ['prometheus']
+
+  # MLflow Tracking Server
+  - job_name: 'mlflow'
+    static_configs:
+      - targets: ['mlflow:5000']
+    scrape_interval: 30s
+    metrics_path: '/metrics'
+
+  # RetentionAI API (when implemented)
+  - job_name: 'retentionai-api'
+    static_configs:
+      - targets: ['retentionai-api:8000']
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+
+  # Nginx Metrics
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx:80']
+    scrape_interval: 30s
+    metrics_path: '/nginx_status'
+
+  # Node Exporter (system metrics)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 30s
+
+  # Docker Container Metrics
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 30s
+    metrics_path: '/metrics'
+
+  # Redis Metrics (when enabled)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    scrape_interval: 30s
+    metrics_path: '/metrics'

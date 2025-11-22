@@ -1,0 +1,213 @@
+# RetentionAI Docker Compose Configuration
+# Production-ready multi-service deployment
+
+version: '3.8'
+
+services:
+  # Streamlit Web Application
+  retentionai-app:
+    build:
+      context: .
+      target: production
+      dockerfile: Dockerfile
+    container_name: retentionai-app
+    ports:
+      - "8501:8501"
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=sqlite:///app/data/retentionai.db
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MODELS_DIR=/app/models
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./logs:/app/logs
+      - mlflow_data:/app/mlruns
+    depends_on:
+      - mlflow
+    networks:
+      - retentionai-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # MLflow Tracking Server
+  mlflow:
+    image: python:3.11-slim
+    container_name: retentionai-mlflow
+    ports:
+      - "5000:5000"
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=sqlite:///mlflow/mlflow.db
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
+    volumes:
+      - mlflow_data:/mlflow
+    networks:
+      - retentionai-network
+    restart: unless-stopped
+    command: >
+      bash -c "
+        pip install mlflow[extras] &&
+        mlflow server
+        --backend-store-uri sqlite:///mlflow/mlflow.db
+        --default-artifact-root /mlflow/artifacts
+        --host 0.0.0.0
+        --port 5000
+      "
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Training Service (for scheduled training jobs)
+  retentionai-trainer:
+    build:
+      context: .
+      target: training
+      dockerfile: Dockerfile
+    container_name: retentionai-trainer
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=sqlite:///app/data/retentionai.db
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MODELS_DIR=/app/models
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./training_outputs:/app/training_outputs
+      - mlflow_data:/app/mlruns
+    depends_on:
+      - mlflow
+    networks:
+      - retentionai-network
+    restart: "no"  # Manual start for training jobs
+    profiles:
+      - training
+
+  # Future API Service (placeholder for FastAPI)
+  retentionai-api:
+    build:
+      context: .
+      target: api
+      dockerfile: Dockerfile
+    container_name: retentionai-api
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=sqlite:///app/data/retentionai.db
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MODELS_DIR=/app/models
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./api_logs:/app/api_logs
+    depends_on:
+      - mlflow
+    networks:
+      - retentionai-network
+    restart: unless-stopped
+    profiles:
+      - api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx Reverse Proxy (for production)
+  nginx:
+    image: nginx:alpine
+    container_name: retentionai-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - retentionai-app
+    networks:
+      - retentionai-network
+    restart: unless-stopped
+    profiles:
+      - production
+
+  # Prometheus (for monitoring)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: retentionai-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - retentionai-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # Grafana (for dashboards)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: retentionai-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - retentionai-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  # Redis (for caching and session storage)
+  redis:
+    image: redis:alpine
+    container_name: retentionai-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - retentionai-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    profiles:
+      - cache
+
+networks:
+  retentionai-network:
+    driver: bridge
+    name: retentionai-network
+
+volumes:
+  mlflow_data:
+    name: retentionai-mlflow-data
+  prometheus_data:
+    name: retentionai-prometheus-data
+  grafana_data:
+    name: retentionai-grafana-data
+  redis_data:
+    name: retentionai-redis-data
