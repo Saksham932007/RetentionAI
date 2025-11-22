@@ -27,6 +27,8 @@ from sklearn.metrics import (
     roc_auc_score, confusion_matrix, classification_report
 )
 from sklearn.model_selection import cross_val_score, StratifiedKFold
+from imblearn.over_sampling import SMOTE
+from imblearn.pipeline import Pipeline as ImbPipeline
 
 try:
     from .config import (
@@ -559,6 +561,131 @@ class ModelTrainer:
             logger.info(f"Best parameters: {best_params}")
             
             return optimization_results
+    
+    def handle_class_imbalance(
+        self,
+        X_train: pd.DataFrame,
+        y_train: pd.Series,
+        strategy: str = 'smote',
+        **kwargs
+    ) -> Tuple[pd.DataFrame, pd.Series]:
+        """
+        Handle class imbalance in training data.
+        
+        Args:
+            X_train: Training features
+            y_train: Training target
+            strategy: Imbalance handling strategy ('smote', 'scale_pos_weight', 'none')
+            **kwargs: Additional parameters for the strategy
+            
+        Returns:
+            tuple: Balanced (X_train, y_train) or original if using scale_pos_weight
+        """
+        # Calculate class distribution
+        class_counts = y_train.value_counts().sort_index()
+        minority_class = class_counts.idxmin()
+        majority_class = class_counts.idxmax()
+        imbalance_ratio = class_counts[majority_class] / class_counts[minority_class]
+        
+        logger.info(f"Class distribution: {class_counts.to_dict()}")
+        logger.info(f"Imbalance ratio: {imbalance_ratio:.2f}")
+        
+        if strategy == 'smote':
+            # Use SMOTE for oversampling minority class
+            smote_params = {
+                'sampling_strategy': kwargs.get('sampling_strategy', 'auto'),
+                'random_state': RANDOM_SEED,
+                'k_neighbors': kwargs.get('k_neighbors', 5)
+            }
+            
+            smote = SMOTE(**smote_params)
+            X_balanced, y_balanced = smote.fit_resample(X_train, y_train)
+            
+            # Convert back to DataFrame/Series with proper indices
+            X_balanced = pd.DataFrame(X_balanced, columns=X_train.columns)
+            y_balanced = pd.Series(y_balanced, name=y_train.name)
+            
+            balanced_counts = y_balanced.value_counts().sort_index()
+            logger.info(f"After SMOTE: {balanced_counts.to_dict()}")
+            
+            return X_balanced, y_balanced
+            
+        elif strategy == 'scale_pos_weight':
+            # Use XGBoost's built-in class weight balancing
+            if self.model is None:
+                self.initialize_model()
+            
+            scale_pos_weight = class_counts[majority_class] / class_counts[minority_class]
+            
+            # Update model parameters
+            if hasattr(self.model, 'set_params'):
+                self.model.set_params(scale_pos_weight=scale_pos_weight)
+            
+            # Store in training artifacts
+            self.training_artifacts['training_params']['scale_pos_weight'] = scale_pos_weight
+            
+            logger.info(f"Set scale_pos_weight to {scale_pos_weight:.3f}")
+            
+            return X_train, y_train
+            
+        elif strategy == 'none':
+            logger.info("No class imbalance handling applied")
+            return X_train, y_train
+            
+        else:
+            raise ValueError(f"Unknown imbalance strategy: {strategy}")
+    
+    def train_with_imbalance_handling(
+        self,
+        X_train: pd.DataFrame,
+        y_train: pd.Series,
+        X_val: Optional[pd.DataFrame] = None,
+        y_val: Optional[pd.Series] = None,
+        imbalance_strategy: str = 'smote',
+        early_stopping_rounds: Optional[int] = 10,
+        **imbalance_kwargs
+    ) -> Dict[str, Any]:
+        """
+        Train model with automatic class imbalance handling.
+        
+        Args:
+            X_train: Training features
+            y_train: Training target
+            X_val: Validation features
+            y_val: Validation target
+            imbalance_strategy: Strategy for handling imbalance
+            early_stopping_rounds: Early stopping patience
+            **imbalance_kwargs: Additional arguments for imbalance handling
+            
+        Returns:
+            dict: Training results with imbalance handling info
+        """
+        logger.info(f"Training with imbalance strategy: {imbalance_strategy}")
+        
+        # Handle class imbalance
+        X_train_balanced, y_train_balanced = self.handle_class_imbalance(
+            X_train, y_train, strategy=imbalance_strategy, **imbalance_kwargs
+        )
+        
+        # Train model with balanced data
+        training_results = self.train_model(
+            X_train_balanced, y_train_balanced,
+            X_val, y_val,
+            early_stopping_rounds
+        )
+        
+        # Add imbalance handling info to results
+        training_results['imbalance_strategy'] = imbalance_strategy
+        training_results['original_train_shape'] = X_train.shape
+        training_results['balanced_train_shape'] = X_train_balanced.shape
+        
+        if imbalance_strategy == 'smote':
+            training_results['smote_applied'] = True
+            training_results['data_augmentation_ratio'] = len(X_train_balanced) / len(X_train)
+        
+        logger.info(f"Training completed with {imbalance_strategy} strategy")
+        
+        return training_results
 
 
 if __name__ == "__main__":
