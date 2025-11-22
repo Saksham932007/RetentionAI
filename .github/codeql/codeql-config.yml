@@ -1,0 +1,31 @@
+# CodeQL Configuration for RetentionAI Security Analysis
+# Configures static analysis for security vulnerabilities
+
+name: "RetentionAI Security Analysis"
+
+disable-default-queries: false
+
+queries:
+  - uses: security-and-quality
+  - uses: security-extended
+
+paths:
+  - src/
+  - tests/
+
+paths-ignore:
+  - "**/*.md"
+  - "docs/**"
+  - "deployment/**"
+  - ".github/**"
+
+# Query filters
+query-filters:
+  - exclude:
+      id: py/unused-import
+  - exclude:
+      id: py/unused-local-variable
+  - include:
+      tags:
+        - security
+        - maintainability

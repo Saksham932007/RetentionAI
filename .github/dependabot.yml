@@ -1,0 +1,94 @@
+# Dependabot configuration for automated dependency updates
+# Keeps dependencies secure and up-to-date
+
+version: 2
+updates:
+  # Python dependencies
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "Saksham932007"
+    assignees:
+      - "Saksham932007"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "dev-deps"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "python"
+    allow:
+      - dependency-type: "direct"
+      - dependency-type: "indirect"
+    ignore:
+      # Ignore major version updates for critical ML packages
+      - dependency-name: "scikit-learn"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "pandas"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "numpy"
+        update-types: ["version-update:semver-major"]
+    groups:
+      # Group ML dependencies together
+      ml-dependencies:
+        patterns:
+          - "scikit-learn"
+          - "pandas"
+          - "numpy"
+          - "scipy"
+          - "matplotlib"
+          - "seaborn"
+          - "plotly"
+      # Group web framework dependencies
+      web-dependencies:
+        patterns:
+          - "streamlit"
+          - "fastapi"
+          - "uvicorn"
+      # Group ML ops dependencies
+      mlops-dependencies:
+        patterns:
+          - "mlflow"
+          - "optuna"
+          - "shap"
+      # Group testing dependencies
+      test-dependencies:
+        patterns:
+          - "pytest*"
+          - "coverage"
+          - "mock"
+
+  # Docker dependencies
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    reviewers:
+      - "Saksham932007"
+    commit-message:
+      prefix: "docker"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  # GitHub Actions dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/.github/workflows"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    reviewers:
+      - "Saksham932007"
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
+      - "github-actions"

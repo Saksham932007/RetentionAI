@@ -1,0 +1,47 @@
+# Code Owners for RetentionAI
+# This file defines who is responsible for code in different parts of the repository
+
+# Global owners - these users will be requested for review on all PRs
+* @Saksham932007
+
+# Data pipeline and processing
+/src/data/ @Saksham932007
+/src/etl_pipeline.py @Saksham932007
+
+# Machine Learning components
+/src/models/ @Saksham932007
+/src/train.py @Saksham932007
+/src/predict.py @Saksham932007
+/src/evaluate.py @Saksham932007
+/src/promote.py @Saksham932007
+
+# Web application
+/src/app.py @Saksham932007
+/src/streamlit_pages/ @Saksham932007
+
+# Infrastructure and deployment
+/Dockerfile @Saksham932007
+/docker-compose.yml @Saksham932007
+/deployment/ @Saksham932007
+/.github/workflows/ @Saksham932007
+
+# Configuration and environment
+/config.py @Saksham932007
+/requirements.txt @Saksham932007
+/.env* @Saksham932007
+
+# Documentation
+/README.md @Saksham932007
+/docs/ @Saksham932007
+*.md @Saksham932007
+
+# Tests
+/tests/ @Saksham932007
+
+# Monitoring and observability
+/monitoring/ @Saksham932007
+/logs/ @Saksham932007
+
+# Database and data
+/database.py @Saksham932007
+/data/ @Saksham932007
